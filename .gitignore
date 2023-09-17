@@ -1,0 +1,5 @@
+# Ignora la carpeta de configuración de vscode
+.vscode
+
+# Ignora todos los archivos .exe generados con la compilación
+*.exe

@@ -2,43 +2,57 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <string>
+#include <iostream>
+#include <regex>
+#include <list>
+
+using namespace std; 
+
+enum command {Open=0, Kill=1, End=2, Error=-1};
+
+// For saving each process information in a list
+class Process {
+    private:
+        string path; 
+        _pid_t pi;
+        _pid_t parent;
+    public: 
+        Process(string, _pid_t, _pid_t);
+        string getPath();
+        void setPath(string);
+};
+
+// commands functions
+void open(); 
+void kill();
+void end();
+// entering commands
+void enterCommands();
 
 __pid_t parentPid = getpid();
 
-std::string getPath() {
-    std::string path;
+int main() {
 
-    std::cout << "\nWrite the path of the program you want to execute (for example: /usr/bin/gnome-temrminal): ";
-    std::cin >> path;
+    enterCommands();
 
-    return path;
-}
-
-void printPID(std::string path) {
-    auto pid = getpid(); // Obtiene el id del proceso hijo
-
-    std::cout << "\n----------------------------------------------------------\n";
-    std::cout << "Process id of the current process: " << pid << "\n";
-    std::cout << "Program executing currently: " << path << "\n";
-    std::cout << "----------------------------------------------------------\n";
+    return 0;
 }
 
 void open() {
-    std::string path = "";
-    auto pid = getpid();
+    string path = "";
 
-    pid = fork(); // Crea el proceso hijo
+    _pid_t pid = fork(); // Creates the child process
     bool is_child_process = false;
 
     if (pid < 0) {
-        std::cout << "Process creation failed" << "\n";
+        cout << "Process creation failed" << "\n";
     }
     else if (pid == 0) {
         is_child_process = true;
-        path = getPath();
-        printPID(path);
+        // path = getPath();
+        // printPID(path);
 
-        execl(path.c_str(), nullptr);
+        // execl(path.c_str(), nullptr);
 
     }
     else { // pid > 0
@@ -47,67 +61,83 @@ void open() {
 
     if (!is_child_process)
     {
-        std::cout << "\nProceso Padre terminó Su Ejecución" << std::endl;
+        cout << "\nProceso Padre terminó Su Ejecución" << endl;
     }
-}
-
-pid_t getPID() {
-    pid_t pid;
-    std::cout << "Write the PID of the process to kill: "; 
-    std::cin >> pid;
 }
 
 void kill() {
     pid_t child_pid = getPID();
     auto ppid = getppid(); // Obtiene el id del proceso padre
 
-    std::cout << "ppid: " << ppid << " parentId: " << parentPid << std::endl;
+    cout << "ppid: " << ppid << " parentId: " << parentPid << endl;
 
     if( ppid == parentPid) {
         kill(child_pid, SIGTERM);
-        std::cout << "\nThe process " << child_pid << " has been killed!"; 
+        cout << "\nThe process " << child_pid << " has been killed!"; 
     }
     else {
-        std::cout << "The process is not a child_process" << std::endl;
+        cout << "The process is not a child_process" << endl;
     }
 
 }
 
-void end() {
 
-}
+void enterCommands(){
+    // List of Processes
+    list<Process> ProcessesList;
+    command cmd;
+    string strcmd = "";
+    string argument = ""; 
 
-void commands() {
-    int option = 0;
+    while(cmd != End) {
+        cout << "\n----------------------------------------\nQueue of child processes: ";
+        cout << "\n-----------------------------------------\nEnter your command: ";
+        getline(cin, strcmd);
 
-    do 
-    {
-        std::cout << "\nChoose your option: \n1. open \n2. kill \n3. end";
-        std::cout << "\nYour option: ";
-        std::cin >> option;
+        if(regex_match(strcmd, regex("(open)(.*)"))) {
+            cmd = Open;
+            argument = strcmd.substr(strcmd.find(" ") + 1);
+            // Hace falta hacer trim del argumento
+        }
+        else if(regex_match(strcmd, regex("(kill)(.*)"))){
+            cmd = Kill;
+            argument = strcmd.substr(strcmd.find(" ") + 1);
+            // Hace falta hacer trim del argumento
+        }
+        else if(regex_match(strcmd, regex("(end)"))){
+            cmd = End;
+        }
+        else {
+            cmd = Error;
+        }
 
-        switch (option)
+        switch (cmd)
         {
+        case 0:
+            cout << "\nOpening " << argument;
+            //open();
+            // Cleaning variables
+            strcmd = "";
+            argument = "";
+            break;
         case 1:
-            open();
+            cout << "\nKilling " << argument;
+            //kill();
+            // Cleaning variables
+            strcmd = "";
+            argument = "";
             break;
         case 2:
-            kill();
-            break;
-        case 3:
-            end();
+            cout << "\nEnding ";
+            //end();
+            // Cleaning variables
+            strcmd = "";
+            argument = "";
             break;
         default:
-            std::cout << "\nInvalid option";
+            cout << "\nCommand not recognized. Try again. ";
             break;
         }
-    } while (option != 3);
-    
-}
-
-int main() {
-
-    commands();
-
-    return 0;
+    }
+     
 }

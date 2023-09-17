@@ -200,7 +200,6 @@ void endProgram(list<Process>* l) {
 void enterCommands(){
     // List of Processes
     list<Process> ProcessesList;
-    char* end;
     command cmd;
     string strcmd = "";
     string argument = ""; 

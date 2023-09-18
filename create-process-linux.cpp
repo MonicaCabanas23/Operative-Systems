@@ -1,7 +1,6 @@
 #include <iostream>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <iostream>
 #include <regex>
 #include <list>
 #include <algorithm>
@@ -10,6 +9,7 @@
 using namespace std; 
 
 enum command {Open=0, Kill=1, End=2, Error=-1};
+bool is_child_process = false;
 
 // For saving each process information in a list
 class Process {
@@ -29,14 +29,17 @@ class Process {
 
 // commands functions
 void open(string, list<Process>*); 
-// void kill();
-// void end();
+bool kill(pid_t, Process);
+void end(list<Process>*);
+Process getProcess(pid_t, list<Process>*);
+void eraseFromList(Process, list<Process>*);
 // entering commands
 void enterCommands();
 
 int main() {
 
-    enterCommands();
+    if (!is_child_process)
+        enterCommands();
 
     return 0;
 }
@@ -75,28 +78,25 @@ void open(string path, list<Process>* l) {
     pid_t pid;
 
     pid = fork(); // Creates the child process
-    bool is_child_process = false;
 
     if (pid < 0) {
         cout << "\nProcess creation failed" << "\n";
     }
     else if (pid == 0) {
         is_child_process = true;
-
         cout << "\n-----------------------------------------";
-        cout << "\nProcess created! ";
+        cout << "\nChild pid: " << getpid();
+        cout << "\nStarting child execution as a clone of the current program! ";
 
+        execl(path.c_str(), path.c_str(), "", "", (char *)0 ); // change the child process image
+    } else {
+        int status;
+        waitpid(pid, &status, 0);
         // Create new process object for later save it in the list
-        Process newProcess = Process(path, getpid(), getppid());
+        Process newProcess = Process(path, pid, getpid());
         (*l).push_back(newProcess);
-
-        // execl(path.c_str(), path.c_str(), "", "", (char *)0 ); // change the child process image
-
-    }
-
-    if (!is_child_process)
-    {
-        cout << "\nProceso Padre terminó Su Ejecución" << endl;
+        cout << "\n-----------------------------------------";
+        cout << "\nThe child changed its execution as a clone of this program to executing the path. We are in the parent ";
     }
 }
 
@@ -108,18 +108,62 @@ void showList(list<Process>* l) {
     }
 }
 
-void kill(pid_t child_pid) {
-    auto ppid = getppid(); // Obtiene el id del proceso padre
-    cout << "\npid del proceso actual: " << getpid() << "\nPpid: " << ppid;
+Process getProcess(pid_t pid, list<Process> *l) {
+    list<Process>::iterator it;
 
-    //if( ppid == parentPid) {
-        //kill(child_pid, SIGTERM);
-        //cout << "\nThe process " << child_pid << " has been killed!"; 
-    //}
-    //else {
-        //cout << "The process is not a child_process" << endl;
-    //}
+    //Searching the process based on the pid
+    for (it = (*l).begin(); it != (*l).end(); ++it){
+        if(pid && pid == (*it).getPid()){
+            return *it;
+        }
+    }
+    // Process not found, return a default-constructed Process object
+    return Process("", {0}, 0);
+}
 
+bool kill(pid_t child_pid, Process process) {
+    auto ppid = getpid(); // Obtiene el id del proceso padre
+    int exit_status;
+
+    if( ppid == process.getParent()) {
+        exit_status =  kill(child_pid, SIGKILL);
+        cout << exit_status;
+        if(exit_status == 0) {
+            cout << "\nThe process " << child_pid << " has been killed!"; 
+            return true;
+        }
+        else {
+            cout << "\nAn error ocurred trying to kill the process. ";
+            return false;
+        }
+    }
+    else {
+        cout << "The process is not a child_process" << endl;
+        return false;
+    }
+
+}
+
+void end(list<Process>* l) {
+    list<Process>::iterator it;
+
+    //Killing all processes
+    if(!(*l).empty()) {
+        for (it = (*l).begin(); it != (*l).end(); ++it){
+            kill((*it).getPid(), *it);
+        }
+    }
+}
+
+void eraseFromList(Process process, list<Process>* l) {
+    list<Process>::iterator it;
+
+    // Searching for the index of the element
+    for (it = (*l).begin(); it != (*l).end(); ++it) {
+        if (process.getPid() == (*it).getPid()) break;
+    }
+    // Deleting the element from the list
+    (*l).erase(it);
 }
 
 void enterCommands(){
@@ -163,14 +207,15 @@ void enterCommands(){
             break;
         case 1:
             cout << "\nKilling " << argument;
-            kill(static_cast<pid_t>(stoi(argument)));
+            if(kill(static_cast<pid_t>(stoi(argument)), getProcess(static_cast<pid_t>(stoi(argument)), &ProcessesList)))
+                eraseFromList(getProcess(static_cast<pid_t>(stoi(argument)), &ProcessesList), &ProcessesList); 
             // Cleaning variables
             strcmd = "";
             argument = "";
             break;
         case 2:
             cout << "\nEnding ";
-            //end();
+            end(&ProcessesList);
             // Cleaning variables
             strcmd = "";
             argument = "";

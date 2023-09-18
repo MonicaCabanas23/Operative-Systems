@@ -34,8 +34,6 @@ void open(string, list<Process>*);
 // entering commands
 void enterCommands();
 
-__pid_t parentPid = getpid();
-
 int main() {
 
     enterCommands();
@@ -74,8 +72,9 @@ void Process::setParent(pid_t parent) {
 }
 
 void open(string path, list<Process>* l) {
+    pid_t pid;
 
-    pid_t pid = fork(); // Creates the child process
+    pid = fork(); // Creates the child process
     bool is_child_process = false;
 
     if (pid < 0) {
@@ -91,11 +90,8 @@ void open(string path, list<Process>* l) {
         Process newProcess = Process(path, getpid(), getppid());
         (*l).push_back(newProcess);
 
-        execl(path.c_str(), path.c_str(), "", "", (char *)0 ); // change the child process image
+        // execl(path.c_str(), path.c_str(), "", "", (char *)0 ); // change the child process image
 
-    }
-    else { // pid > 0
-        wait(nullptr); // El proceso padre espera a que el proceso hijo termine
     }
 
     if (!is_child_process)
@@ -112,21 +108,19 @@ void showList(list<Process>* l) {
     }
 }
 
-// void kill() {
-    //pid_t child_pid = getPID();
-    //auto ppid = getppid(); // Obtiene el id del proceso padre
-
-    //cout << "ppid: " << ppid << " parentId: " << parentPid << endl;
+void kill(pid_t child_pid) {
+    auto ppid = getppid(); // Obtiene el id del proceso padre
+    cout << "\npid del proceso actual: " << getpid() << "\nPpid: " << ppid;
 
     //if( ppid == parentPid) {
         //kill(child_pid, SIGTERM);
         //cout << "\nThe process " << child_pid << " has been killed!"; 
     //}
     //else {
-      //  cout << "The process is not a child_process" << endl;
+        //cout << "The process is not a child_process" << endl;
     //}
 
-// }
+}
 
 void enterCommands(){
     // List of Processes
@@ -169,7 +163,7 @@ void enterCommands(){
             break;
         case 1:
             cout << "\nKilling " << argument;
-            //kill();
+            kill(static_cast<pid_t>(stoi(argument)));
             // Cleaning variables
             strcmd = "";
             argument = "";

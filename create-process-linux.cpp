@@ -5,11 +5,11 @@
 #include <list>
 #include <algorithm>
 #include <string>
+#include <signal.h>
 
 using namespace std; 
 
 enum command {Open=0, Kill=1, End=2, Error=-1};
-bool is_child_process = false;
 
 // For saving each process information in a list
 class Process {
@@ -29,7 +29,7 @@ class Process {
 
 // commands functions
 void open(string, list<Process>*); 
-bool kill(pid_t, Process);
+bool myKill(pid_t, Process);
 void end(list<Process>*);
 Process getProcess(pid_t, list<Process>*);
 void eraseFromList(Process, list<Process>*);
@@ -38,8 +38,7 @@ void enterCommands();
 
 int main() {
 
-    if (!is_child_process)
-        enterCommands();
+    enterCommands();
 
     return 0;
 }
@@ -76,6 +75,11 @@ void Process::setParent(pid_t parent) {
 
 void open(string path, list<Process>* l) {
     pid_t pid;
+    int pipefd[2];
+
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+    }
 
     pid = fork(); // Creates the child process
 
@@ -83,17 +87,36 @@ void open(string path, list<Process>* l) {
         cout << "\nProcess creation failed" << "\n";
     }
     else if (pid == 0) {
-        is_child_process = true;
         cout << "\n-----------------------------------------";
-        cout << "\nChild pid: " << getpid();
+        cout << "\nChild pid: " << getpid(); // This PID changes when we change the image ( call execl() )
         cout << "\nStarting child execution as a clone of the current program! ";
 
-        execl(path.c_str(), path.c_str(), "", "", (char *)0 ); // change the child process image
+        pid_t child_pid = getpid(); // Obtain the new PID of the child
+        if (write(pipefd[1], &child_pid, sizeof(child_pid)) == -1) {
+            perror("write");
+        }
+        
+        // Execute the new program
+        if (execl(path.c_str(), path.c_str(), "", "", (char *)0 ) == -1) {
+            perror("execl");
+            exit(1); // Exit the child process on error
+        }
+
+        // execl() should never return, but if it does, an error occurred
+        perror("execl");
+        exit(1);
     } else {
         int status;
-        waitpid(pid, &status, 0);
+        waitpid(pid, &status, 0); // Waiting for the childs execution to terminate to continue
+        
+        // Read the child's PID from the pipe
+        pid_t child_pid;
+        if (read(pipefd[0], &child_pid, sizeof(child_pid)) == -1) {
+            perror("read");
+        } 
+
         // Create new process object for later save it in the list
-        Process newProcess = Process(path, pid, getpid());
+        Process newProcess = Process(path, child_pid, getpid());
         (*l).push_back(newProcess);
         cout << "\n-----------------------------------------";
         cout << "\nThe child changed its execution as a clone of this program to executing the path. We are in the parent ";
@@ -121,19 +144,18 @@ Process getProcess(pid_t pid, list<Process> *l) {
     return Process("", {0}, 0);
 }
 
-bool kill(pid_t child_pid, Process process) {
+bool myKill(pid_t child_pid, Process process) {
     auto ppid = getpid(); // Obtiene el id del proceso padre
     int exit_status;
 
     if( ppid == process.getParent()) {
         exit_status =  kill(child_pid, SIGKILL);
-        cout << exit_status;
         if(exit_status == 0) {
             cout << "\nThe process " << child_pid << " has been killed!"; 
             return true;
         }
         else {
-            cout << "\nAn error ocurred trying to kill the process. ";
+            cout << "\nAn error ocurred trying to kill the process. " << strerror(errno);
             return false;
         }
     }
@@ -150,7 +172,7 @@ void end(list<Process>* l) {
     //Killing all processes
     if(!(*l).empty()) {
         for (it = (*l).begin(); it != (*l).end(); ++it){
-            kill((*it).getPid(), *it);
+            myKill((*it).getPid(), *it);
         }
     }
 }
@@ -207,7 +229,7 @@ void enterCommands(){
             break;
         case 1:
             cout << "\nKilling " << argument;
-            if(kill(static_cast<pid_t>(stoi(argument)), getProcess(static_cast<pid_t>(stoi(argument)), &ProcessesList)))
+            if(myKill(static_cast<pid_t>(stoi(argument)), getProcess(static_cast<pid_t>(stoi(argument)), &ProcessesList)))
                 eraseFromList(getProcess(static_cast<pid_t>(stoi(argument)), &ProcessesList), &ProcessesList); 
             // Cleaning variables
             strcmd = "";

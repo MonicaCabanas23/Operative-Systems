@@ -1,38 +1,41 @@
 #include <iostream>
 #include <string>
+#include <csignal>
 #include <sys/wait.h>
-#include <semaphore.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
 
 using namespace std; 
-
-//Semaphore for handling the race problem
-#define SEM_NAME "/temp_sem"
 
 #define SHM_NAME "/IBERO_Shm"
 #define SHM_PERMISSION 00600
 #define SHM_SIZE 500
+int shmd;
 
+pid_t getServerPID();
 int openSharedMemory();
-sem_t* openSemaphore();
 void initServer();
 string writeMessage();
-int sendToServer(string, int);  //Mostrar en pantalla cuantos mensajes han sido almacenados
-// void viewMessagesSaved();
+void readMessage();
+int sendToServer(string);  // Mostrar en pantalla cuantos mensajes han sido almacenados
+void sigReadHandler(int); // Handler for reading the shared memory
+
 
 int main() {
+    shmd = openSharedMemory();
     int option = 0; 
-    int shmd = openSharedMemory();
-    //sem_t* sem = openSemaphore();
     string msg = "";
+    pid_t server_pid;
+
+    //signal(SIGUSR2, sigReadHandler); // For handling when the server sends signal for reading
 
     if(shmd == -1) {
         cout << "\nThe server is not responding. Wait for a while ";
         initServer();
-    }
+    } else server_pid = getServerPID(); // If the server exists, get the PID for sending signals
 
     while(shmd != -1 && option != 3) {
         cout << "\n----------------------------------------------"; 
@@ -44,9 +47,12 @@ int main() {
         case 1:
             msg = writeMessage();
             if(msg != "")
-                //sem_wait(sem); // Waits if another process is writing/reading
-                sendToServer(msg, shmd);
-                //sem_post(sem); // Increments sem to 1 for indicating that another process can write/read
+                if(sendToServer(msg) == 0) {
+                    //send signal to server to read the message
+                    if(kill(server_pid, SIGUSR1) == 0)
+                        cout << "\nServer notified for reading the shared memory";
+                    else cout << strerror(errno) << endl;
+                }
             break;
         case 2:
             //viewMessagesSaved()
@@ -61,7 +67,33 @@ int main() {
     }
 
     return 0;
-    
+}
+
+pid_t getServerPID() {
+    const char* processName = "server";
+    char buffer[128];
+    string command = "pgrep -o " + string(processName);
+    pid_t pid;
+
+    // Open a pipe to the shell command
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        cout << "Error executing command." << std::endl;
+        return 1;
+    }
+
+    // Read the PID from the command output
+    if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        pid = static_cast<pid_t>(stoi(buffer));
+        cout << "\nPID of " << processName << " is " << pid << endl;
+    } else {
+        cout << "\nProcess not found ";
+    }
+
+    // Close the pipe
+    pclose(pipe);
+
+    return pid;
 }
 
 int openSharedMemory() {
@@ -74,15 +106,6 @@ int openSharedMemory() {
     }
 
     return shmd;
-}
-
-sem_t* openSemaphore() {
-    // Initialize with the semaphore to 0 since this is not the server. The server is supposed to read first.
-    sem_t* sem = sem_open(SEM_NAME, 0);
-    if (sem == SEM_FAILED) {
-        cout << "\nSemaphore opening failed";
-    }
-    return sem;
 }
 
 void initServer() {
@@ -122,7 +145,29 @@ string writeMessage() {
     return message;
 }
 
-int sendToServer(string message, int shmd) {
+void readMessage() {
+    try {
+        struct stat shmobj_st;
+        if (fstat(shmd, &shmobj_st) == -1)
+        {
+            std::cout << "\nError getting properties of shared memory";
+            throw 1;
+        }
+
+        char* ptr = (char*) mmap(NULL, shmobj_st.st_size, PROT_READ, MAP_SHARED, shmd, 0);
+        if (ptr == MAP_FAILED) {
+            std::cout << "\nError reading shared memory";
+            throw 1;
+        }
+        std::cout << "\nMessage sent from server: "<< ptr;  // Quantity of messages saved
+    }
+    catch (...) {
+        close(shmd);
+        exit(1);
+    }
+}
+
+int sendToServer(string message) {
 
     try {
         std::cout << "Escribiendo en la Memoria Compartida!" << std::endl;
@@ -144,4 +189,8 @@ int sendToServer(string message, int shmd) {
     }
 
     return 0;
+}
+
+void sigReadHandler(int signum) {
+    readMessage();
 }

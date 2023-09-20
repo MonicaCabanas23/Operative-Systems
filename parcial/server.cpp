@@ -1,7 +1,6 @@
 #include <iostream>
 #include <string>
 #include <csignal>
-#include <semaphore.h>
 #include <fstream>
 #include <sys/mman.h>
 #include <fcntl.h>
@@ -18,35 +17,64 @@ using namespace std;
 #define SHM_PERMISSION 00600
 #define SHM_SIZE 500
 int shmd;
-sem_t* sem;
-// Open the file in append mode
-ofstream outFile("messages.txt", std::ios::app);
+int counter;
+ofstream outFile("messages.txt", std::ios::app); // Open the file in append mode
 
+void checkExistence();
 int openSharedMemory();
-sem_t* openSemaphore();
 void readMessage();
-//string writeMessage();
-//int sendToClient(string, int);
 void updateFile(string);
+int sendToClient(string);
+void sigReadHandler(int);
+//void sigReadHandler(int, siginfo_t*, void*);
 void sigintHandler(int);
 
 int main() {
+    checkExistence();
     shmd = openSharedMemory();
-    //sem = openSemaphore();
+    counter = 0;
 
+    //struct sigaction sa;
+    //sa.sa_flags = SA_SIGINFO; // Indicates signal action with signal info
+    //sa.sa_sigaction = sigReadHandler;
+    //sigaction(SIGUSR1, &sa, NULL); // For handling the reading signal sent from a client and getting the pid of the client
+
+    signal(SIGUSR1, sigReadHandler);
     signal(SIGINT, sigintHandler); // For handling the ^C signal, this way we close the shared memory
 
     cout << "\nCTRL + C for ending the server. ";
 
     while (true){
-        //sem_wait(sem); // Decrements the semaphore to 0 meaning a block to other processes
-        cout << "\n----------------------------------------------"; 
-        readMessage();
+        cout << "\nWaiting for signals from clients";
         sleep(5);
-        //sem_post(sem); // Increments the semaphore to 1 meaning a release of the semaphore
     }
 
     return 0;
+}
+
+void checkExistence() {
+    const char* processName = "server";
+    char buffer[128];
+    string command = "pgrep -o " + string(processName);
+    pid_t pid;
+
+    // Open a pipe to the shell command
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        cout << "Error executing command." << std::endl;
+    }
+
+    // Read the PID from the command output
+    if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        pid = static_cast<pid_t>(stoi(buffer));
+        if(pid != getpid()) {
+            cout << "\nProcess already running with PID: " << pid << endl;
+            exit(0);
+        }
+    }
+
+    // Close the pipe
+    pclose(pipe);
 }
 
 int openSharedMemory() {
@@ -74,16 +102,6 @@ int openSharedMemory() {
     }
 
     return shmd;
-}
-
-sem_t* openSemaphore() {
-    sem_t* sem = sem_open(SEM_NAME, O_CREAT, SHM_PERMISSION, 1); //the server starts whatever operation it needs with the semaphore
-    if (sem == SEM_FAILED) {
-        std::cerr << "Semaphore creation failed" << std::endl;
-        exit(1);
-    }
-
-    return sem;
 }
 
 void readMessage() {
@@ -126,16 +144,61 @@ void updateFile(string text) {
 
 }
 
+void sigReadHandler(int signum) {
+
+    try {
+        cout << "\n----------------------------------------------"; 
+        readMessage();
+        counter++;
+    } catch(...) {
+        cout << strerror(errno);
+    }
+
+    //string msg = "Current messages in file: " + to_string(counter);
+
+    // Write in the shared memory the value of the counter
+    //if(sendToClient(msg) == 0) {
+        // send signal to the client who asked for it.
+       // if(kill(info->si_pid, SIGUSR2) == 0)
+            //cout << "\nMessage sent to " << info->si_pid;
+        //else cout << "\nError: " << strerror(errno);
+    //} else {
+        //cout << "\nCould not write in shared memory";
+   // }
+}
+
+int sendToClient(string message) {
+    try {
+        std::cout << "Escribiendo en la Memoria Compartida!" << std::endl;
+        char* ptr = (char*) mmap(NULL, SHM_SIZE, PROT_WRITE, MAP_SHARED, shmd, 0);
+
+        if (ptr == MAP_FAILED) {
+            std::cout << "Error al escribir en la Memoria Compartida!" << std::endl;
+            cout << strerror(errno);
+            throw 1;
+        }
+
+        // Copying the message from the *src (message.c_str()) to the *dest (ptr)
+        memcpy(ptr, message.c_str(), sizeof(message));  
+
+    }
+    catch (...) {
+        close(shmd);
+        exit(1);
+        return -1;
+    }
+
+    return 0;
+}
+
 // Just the server can close the shared memory
 void sigintHandler(int signum) {
     cout << "\n----------------------------------------------"; 
-    cout << "\nClosing the shared memory and semaphore";
+    cout << "\nClosing the shared";
     // Close and unlink the shared memory
     close(shmd);
     shm_unlink(SHM_NAME);
-    // Close and unlink the semaphore
-    sem_close(sem);
-    sem_unlink(SEM_NAME);
     // Close the file
     outFile.close();
+    exit(0); // Terminate the program
 }

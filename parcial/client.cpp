@@ -8,7 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-using namespace std; 
+using namespace std;
 
 #define SHM_NAME "/IBERO_Shm"
 #define SHM_PERMISSION 00600
@@ -49,7 +49,7 @@ int main() {
         } 
         if (acceptUserInput) {
             cout << "\n----------------------------------------------"; 
-            cout << "\nChoose your option: \n1. Write an entry.\n2. View how many text entries are saved.\n3. End. \nYour option: ";
+            cout << "\nChoose your option: \n1. Write text and send it to server.\n2. Request quantity of messages.\n3. End. \nYour option: ";
             cin >> option; 
         }
 
@@ -59,14 +59,28 @@ int main() {
                 if(msg != "")
                 if(sendToServer(msg) == 0) {
                     //send signal to server to read the message
-                    if(kill(server_pid, SIGUSR1) == 0)
-                        cout << "\nServer notified for reading the shared memory";
-                    else cout << strerror(errno) << endl;
+                    if(kill(server_pid, SIGUSR1) == 0) {
+                        cout << "\n----------------------------------------------";
+                        cout << "\nServer notified of the sent message.";
+                    }
+                    else {
+                        cout << "\n----------------------------------------------\n";
+                        cout << strerror(errno) << endl;
+                    }
                 }
             break;
             case 2:
-                //viewMessagesSaved()
-                break;
+                //send signal to server to return how many text entries are saved
+                if(kill(server_pid, SIGUSR2) == 0) {
+                    cout << "\n----------------------------------------------";
+                    cout << "\nServer notified of the request for quantity of messages.";
+                }
+                else {
+                    cout << "\n----------------------------------------------\n";
+                    cout << "\nServer is not running";
+                    initServer();
+                } 
+            break;
             case 3: 
                 cout << "\nGood bye!\n";
             break;
@@ -89,7 +103,7 @@ pid_t getServerPID() {
     // Open a pipe to the shell command
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {
-        cout << "Error executing command." << std::endl;
+        cout << "\nError executing command." << endl;
         return 1;
     }
 
@@ -108,11 +122,12 @@ pid_t getServerPID() {
 }
 
 int openSharedMemory() {
-    std::cout << "Abriendo la Memoria Compartida!" << std::endl;
+    cout << "----------------------------------------------";
+    cout << "\nOpening shared memory" << endl;
     int shmd = shm_open(SHM_NAME, O_RDWR, SHM_PERMISSION); // Since it has no creation mode, if the shmd does not exist, an error will happen
 
     if (shmd == -1) {
-        std::cout << "Error abriendo la Memoria Compartida! "  << strerror(errno) << std::endl;
+        cout << "\nError trying to open the shared memory: "  << strerror(errno) << endl;
         return -1; // Return the error value for executing the server. Este error también sucede si el servidor ya está leyendo la memoria compartida.
     }
 
@@ -141,7 +156,6 @@ void initServer() {
         waitpid(pid, &status, 0); // Waiting for the childs execution to terminate to continue
 
         cout << "\n-----------------------------------------";
-        cout << "\nThe child changed its execution as a clone of this program to executing the path. We are in the parent ";
         cout << "\nServer has been initialized\n";
     }
 }
@@ -161,16 +175,16 @@ void readMessage() {
         struct stat shmobj_st;
         if (fstat(shmd, &shmobj_st) == -1)
         {
-            std::cout << "\nError getting properties of shared memory";
+            cout << "\nError getting properties of shared memory";
             throw 1;
         }
 
         char* ptr = (char*) mmap(NULL, shmobj_st.st_size, PROT_READ, MAP_SHARED, shmd, 0);
         if (ptr == MAP_FAILED) {
-            std::cout << "\nError reading shared memory";
+            cout << "\nError reading shared memory";
             throw 1;
         }
-        std::cout << "\nMessage sent from server: "<< ptr;  // Quantity of messages saved
+        cout << "\nResponse from server: "<< ptr;  // Quantity of messages saved
     }
     catch (...) {
         close(shmd);
@@ -181,11 +195,11 @@ void readMessage() {
 int sendToServer(string message) {
 
     try {
-        std::cout << "Escribiendo en la Memoria Compartida!" << std::endl;
+        cout << "\nWriting message in shared memory" << endl;
         char* ptr = (char*) mmap(NULL, SHM_SIZE, PROT_WRITE, MAP_SHARED, shmd, 0);
 
         if (ptr == MAP_FAILED) {
-            std::cout << "Error al escribir en la Memoria Compartida!" << std::endl;
+            cout << "\nError when trying to write in the shared memory" << strerror(errno) << endl;
             throw 1;
         }
 

@@ -25,8 +25,8 @@ int openSharedMemory();
 void readMessage();
 void updateFile(string);
 int sendToClient(string);
-void sigReadHandler(int);
-//void sigReadHandler(int, siginfo_t*, void*);
+//void sigReadHandler(int);
+void sigReadHandler(int, siginfo_t*, void*);
 void sigintHandler(int);
 
 int main() {
@@ -34,12 +34,12 @@ int main() {
     shmd = openSharedMemory();
     counter = 0;
 
-    //struct sigaction sa;
-    //sa.sa_flags = SA_SIGINFO; // Indicates signal action with signal info
-    //sa.sa_sigaction = sigReadHandler;
-    //sigaction(SIGUSR1, &sa, NULL); // For handling the reading signal sent from a client and getting the pid of the client
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO; // Indicates signal action with signal info
+    sa.sa_sigaction = sigReadHandler;
+    sigaction(SIGUSR1, &sa, NULL); // For handling the reading signal sent from a client and getting the pid of the client
 
-    signal(SIGUSR1, sigReadHandler);
+    //signal(SIGUSR1, sigReadHandler);
     signal(SIGINT, sigintHandler); // For handling the ^C signal, this way we close the shared memory
 
     cout << "\nCTRL + C for ending the server. ";
@@ -135,7 +135,7 @@ void readMessage() {
 void updateFile(string text) {
 
     if (!outFile.is_open()) {
-        std::cerr << "Error opening the file." << endl;
+        cerr << "Error opening the file." << endl;
         exit(1);
     }
 
@@ -144,36 +144,33 @@ void updateFile(string text) {
 
 }
 
-void sigReadHandler(int signum) {
+void sigReadHandler(int signum, siginfo_t* info, void* context) {
 
     try {
         cout << "\n----------------------------------------------"; 
         readMessage();
         counter++;
+        string msg = "Current messages in file: " + to_string(counter);
+        //Write in the shared memory the value of the counter
+        if(sendToClient(msg) == 0) {
+            // send signal to the client who asked for it.
+            if(kill(info->si_pid, SIGUSR2) == 0)
+                cout << "\nSignal sent to " << info->si_pid;
+            else cout << "\nError: " << strerror(errno);
+        } else {
+            cout << "\nCould not write in shared memory";
+        }
     } catch(...) {
         cout << strerror(errno);
     }
-
-    //string msg = "Current messages in file: " + to_string(counter);
-
-    // Write in the shared memory the value of the counter
-    //if(sendToClient(msg) == 0) {
-        // send signal to the client who asked for it.
-       // if(kill(info->si_pid, SIGUSR2) == 0)
-            //cout << "\nMessage sent to " << info->si_pid;
-        //else cout << "\nError: " << strerror(errno);
-    //} else {
-        //cout << "\nCould not write in shared memory";
-   // }
 }
 
 int sendToClient(string message) {
     try {
-        std::cout << "Escribiendo en la Memoria Compartida!" << std::endl;
         char* ptr = (char*) mmap(NULL, SHM_SIZE, PROT_WRITE, MAP_SHARED, shmd, 0);
 
         if (ptr == MAP_FAILED) {
-            std::cout << "Error al escribir en la Memoria Compartida!" << std::endl;
+            cout << "\nError when trying to write in the shared memory" << endl;
             cout << strerror(errno);
             throw 1;
         }

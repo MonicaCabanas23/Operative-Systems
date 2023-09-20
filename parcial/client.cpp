@@ -14,6 +14,8 @@ using namespace std;
 #define SHM_PERMISSION 00600
 #define SHM_SIZE 500
 int shmd;
+bool sigReceived = false;
+bool acceptUserInput = true;
 
 pid_t getServerPID();
 int openSharedMemory();
@@ -23,30 +25,38 @@ void readMessage();
 int sendToServer(string);  // Mostrar en pantalla cuantos mensajes han sido almacenados
 void sigReadHandler(int); // Handler for reading the shared memory
 
-
 int main() {
     shmd = openSharedMemory();
     int option = 0; 
     string msg = "";
     pid_t server_pid;
 
-    //signal(SIGUSR2, sigReadHandler); // For handling when the server sends signal for reading
+    signal(SIGUSR2, sigReadHandler); // For handling when the server sends signal for reading
 
     if(shmd == -1) {
         cout << "\nThe server is not responding. Wait for a while ";
         initServer();
     } else server_pid = getServerPID(); // If the server exists, get the PID for sending signals
 
-    while(shmd != -1 && option != 3) {
-        cout << "\n----------------------------------------------"; 
-        cout << "\nChoose your option: \n1. Write a message.\n2. View messages saved.\n3. End. \nYour option: ";
-        cin >> option; 
+    while(shmd != -1 && option != 3 && kill(server_pid, 0) == 0) {
+        sleep(1);
+        // This is for first reading what is in the shared memory, and then asking the user for an entry
+        if (sigReceived) {
+            acceptUserInput = false; // Pause user input
+            readMessage();
+            acceptUserInput = true; // Resume user input
+            sigReceived = false; // Reset the flag
+        } 
+        if (acceptUserInput) {
+            cout << "\n----------------------------------------------"; 
+            cout << "\nChoose your option: \n1. Write an entry.\n2. View how many text entries are saved.\n3. End. \nYour option: ";
+            cin >> option; 
+        }
 
-        switch (option)
-        {
-        case 1:
-            msg = writeMessage();
-            if(msg != "")
+        switch (option){
+            case 1:
+                msg = writeMessage();
+                if(msg != "")
                 if(sendToServer(msg) == 0) {
                     //send signal to server to read the message
                     if(kill(server_pid, SIGUSR1) == 0)
@@ -54,16 +64,17 @@ int main() {
                     else cout << strerror(errno) << endl;
                 }
             break;
-        case 2:
-            //viewMessagesSaved()
+            case 2:
+                //viewMessagesSaved()
+                break;
+            case 3: 
+                cout << "\nGood bye!\n";
             break;
-        case 3: 
-            cout << "\nGood bye!\n";
-            break;
-        default:
-            cout << "\nInvalid option. Try again.";
+            default:
+                cout << "\nInvalid option. Try again.";
             break;
         }
+
     }
 
     return 0;
@@ -192,5 +203,5 @@ int sendToServer(string message) {
 }
 
 void sigReadHandler(int signum) {
-    readMessage();
+    sigReceived = true;
 }

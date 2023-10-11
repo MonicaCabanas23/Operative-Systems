@@ -44,6 +44,13 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "typeinfo": "cpp",
-        "csignal": "cpp"
+        "csignal": "cpp",
+        "chrono": "cpp",
+        "condition_variable": "cpp",
+        "ctime": "cpp",
+        "ratio": "cpp",
+        "future": "cpp",
+        "mutex": "cpp",
+        "thread": "cpp"
     }
 }

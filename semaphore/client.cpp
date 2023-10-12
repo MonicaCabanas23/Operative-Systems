@@ -8,6 +8,10 @@ using namespace std;
 // Monitor creation
 Monitor monitor = Monitor();
 
+// Global variable
+bool received = false;
+bool sent = false;
+
 // Functions prototypes
 void displayMenu();
 pid_t getServerPID();
@@ -19,8 +23,15 @@ void reader(string msg) {
     int pos = msg.find(" ");
     string str = msg.substr(pos + 1);
 
-    if(str.compare("messages registered") == 0)
+    if(str.compare("messages registered") == 0) {
         cout << "\nThe server sent: " << msg;
+        received = true;
+    }
+}
+
+void reviewer() {
+    cout << "\nMessage sent";
+    sent = true;
 }
 
 int main() {
@@ -46,13 +57,31 @@ void displayMenu() {
 
         switch (option){
             case 1: {
-                string msg = "";
-                msg = getMessage();
+                int attempts = 100;
+                string msg = getMessage();
+
                 // Critical zone
                 if(msg != "") {
-                    monitor.writeInMemory(msg);
-                    sleep(1); // Giving some time to the server to read, update the file, and write in the memory
-                    monitor.readMemory(reader);
+                    while(attempts > 0){
+                        monitor.writeInMemory(msg, reviewer);
+                        attempts--;
+
+                        if(sent)
+                            break;
+                    }
+                    sent = false;
+
+                    sleep(2); // Giving some time to the server to read, update the file, and write in the memory
+                    
+                    while(attempts > 0) {
+                        monitor.readMemory(reader);
+                        attempts--;
+
+                        if(received) 
+                            break;
+                    }
+
+                    received = false;
                 }
                 break;
             }

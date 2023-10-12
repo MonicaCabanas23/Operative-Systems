@@ -25,7 +25,7 @@ public:
     ~Monitor();
 
     int Inicializar(bool server);
-    int writeInMemory(string);
+    int writeInMemory(string, void (*callback)(void));
     int readMemory(void (*callback)(string));
 };
 
@@ -84,10 +84,11 @@ int Monitor::Inicializar(bool server) {
     return 0;
 }
 
-int Monitor::writeInMemory(string message) {
+int Monitor::writeInMemory(string message, void (*callback) (void)) {
     char* ptr; 
 
     sem_wait(sem);
+
     // Open the shared memory
     shmd = shm_open(SHM_NAME, O_RDWR, SHM_PERMISSION);
 
@@ -105,6 +106,8 @@ int Monitor::writeInMemory(string message) {
 
         // Copying the message from the *src (message.c_str()) to the *dest (ptr)
         memcpy(ptr, message.c_str(), message.length());  
+
+        callback();
     }
     catch (...) {
         close(shmd);
@@ -140,12 +143,11 @@ int Monitor::readMemory(void (*callback) (string)) {
             throw 1;
         }
         
-        cout << "\nMessage received: "<< ptr;
-        
         // Check if the shared memory contains data (non-empty)
         size_t dataLength = strlen(ptr);
-        if (dataLength > 0)
+        if (dataLength > 0) {
             callback(ptr);
+        }
     }
     catch (...) {
         close(shmd);

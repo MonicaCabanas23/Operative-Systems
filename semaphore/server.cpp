@@ -5,15 +5,20 @@
 
 using namespace std;
 
+// Global variables
 int counter;
 ofstream outFile("messages.txt", ios::app); // Open the file in append mode
 Monitor monitor = Monitor();
+bool sent = false;
+bool received = false;
 
 void checkExistence();
 void updateFile(string);
+void reviewer();
 int readHandler();
 void writeHandler();
 void sigIntHandler(int);
+
 
 int main() {
     checkExistence();
@@ -75,6 +80,12 @@ void updateFile(string text) {
     // Append text to the file
     outFile << text << endl;
     counter++;
+    received = true;
+    cout << "\nMessage received: " << text;
+}
+
+void reviewer() {
+    sent = true;
 }
 
 int readHandler() {
@@ -85,8 +96,17 @@ int readHandler() {
 }
 
 void writeHandler() {
+    int attempts = 100;
     string msg = to_string(counter) + " messages registered";
-    monitor.writeInMemory(msg);
+
+    while(attempts > 0){
+        monitor.writeInMemory(msg, reviewer);
+        attempts--;
+
+        if(sent)
+            break;
+    }
+    sent = false;
 }
 
 // Just the server can close the shared memory

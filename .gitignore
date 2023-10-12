@@ -1,5 +1,0 @@
-#Ignora todos los archivos .out generados en linux
-*.out
-
-# Ignora todos los archivos .exe generados con la compilación
-*.exe

@@ -85,6 +85,7 @@ int Monitor::Inicializar(bool server) {
 }
 
 int Monitor::writeInMemory(string message) {
+    char* ptr; 
 
     sem_wait(sem);
     // Open the shared memory
@@ -92,12 +93,15 @@ int Monitor::writeInMemory(string message) {
 
     try {
         cout << "\nWriting message in shared memory" << endl;
-        char* ptr = (char*) mmap(NULL, SHM_SIZE, PROT_WRITE, MAP_SHARED, shmd, 0);
+        ptr = (char*) mmap(NULL, SHM_SIZE, PROT_WRITE, MAP_SHARED, shmd, 0);
 
         if (ptr == MAP_FAILED) {
             cout << "\nError when trying to write in the shared memory" << endl;
             throw 1;
         }
+
+        // Clear the shared memory
+        memset(ptr, 0, SHM_SIZE);
 
         // Copying the message from the *src (message.c_str()) to the *dest (ptr)
         memcpy(ptr, message.c_str(), message.length());  

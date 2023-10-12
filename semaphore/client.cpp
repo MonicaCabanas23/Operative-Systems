@@ -4,6 +4,7 @@
 
 using namespace std;
 
+
 // Monitor creation
 Monitor monitor = Monitor();
 
@@ -15,7 +16,11 @@ string getMessage();
 void sigintHandler(int);
 
 void reader(string msg) {
-    cout << "\nThe message is: " << msg;
+    int pos = msg.find(" ");
+    string str = msg.substr(pos + 1);
+
+    if(str.compare("messages registered") == 0)
+        cout << "\nThe server sent: " << msg;
 }
 
 int main() {
@@ -44,8 +49,11 @@ void displayMenu() {
                 string msg = "";
                 msg = getMessage();
                 // Critical zone
-                if(msg != "") 
+                if(msg != "") {
                     monitor.writeInMemory(msg);
+                    sleep(1); // Giving some time to the server to read, update the file, and write in the memory
+                    monitor.readMemory(reader);
+                }
                 break;
             }
             case 2:
